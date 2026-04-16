@@ -93,13 +93,13 @@ Close the entry vector.
 
    | Jurisdiction | Law | Notification Deadline | Authority |
    |-------------|-----|----------------------|-----------|
-   | EU/EEA | GDPR Art. 33 | 72h to supervisory authority (DPA) | National DPA of each country |
-   | EU/EEA | GDPR Art. 34 | "Without undue delay" to users (only if high risk) | N/A (direct to users) |
-   | Peru | Ley 29733 + DS 003-2013-JUS | No fixed deadline. "When breach may cause harm" to ANPDP + affected parties | ANPDP (www.gob.pe/anpdp) |
-   | Colombia | Ley 1581 de 2012 | "As soon as possible" to SIC + affected parties | SIC (www.sic.gov.co) |
-   | Mexico | LFPDPPP Art. 20 | "Immediately" when breach significantly affects rights | INAI (home.inai.org.mx) |
-   | Chile | Ley 19.628 (+ future framework law) | No specific deadline yet | Consejo para la Transparencia |
-   | USA (minors) | State breach notification laws (not COPPA) | Varies by state (e.g., CA: 72h) | State AG office |
+   | EU/EEA | GDPR Art. 33 | **72h** to supervisory authority (DPA) | National DPA of each country |
+   | EU/EEA | GDPR Art. 34 | "Without undue delay" to users (only if high risk) | Direct to users |
+   | Peru | Ley 29733 + **DS 016-2024-JUS** (effective Mar 30 2025) | **48h** to ANPDP + affected parties. Fine up to 50 UIT | ANPDP (www.gob.pe/anpdp) |
+   | Colombia | Ley 1581 + SIC Circular Externa 003/2018 | **15 business days** to RNBD | SIC (www.sic.gov.co) |
+   | Mexico | New LFPDPPP (effective Mar 21 2025) Art. 19 | **"Immediately"** (no fixed hour deadline). INAI dissolved → new authority | Secretaria de Anticorrupcion |
+   | Chile | **Ley 21.719** (effective Dec 1 2026) | **72h** to new Data Protection Agency | Agencia PDP (created by law) |
+   | USA (minors) | State breach notification laws (NOT COPPA) | Varies by state (e.g., CA: 72h) | State AG office |
 
    **Important:** COPPA (USA) governs data collection consent for children under 13, NOT breach notification. Breach notification for minors' data falls under state laws.
 
