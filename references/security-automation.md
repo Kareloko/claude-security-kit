@@ -128,7 +128,9 @@ In middleware or `next.config.ts`:
 Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
 ```
 
-Submit to https://hstspreload.org/ when HTTPS is 100% stable.
+**Ramp-up recomendado:** empezar con `max-age=300` (5 min) para probar, luego subir a `max-age=31536000` (1 año), y finalmente a 2 años + preload. Si HTTPS falla con max-age alto, quedas bloqueado ese tiempo.
+
+Submit to https://hstspreload.org/ cuando HTTPS sea 100% estable y max-age sea >= 1 año.
 
 ---
 

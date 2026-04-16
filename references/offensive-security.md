@@ -41,14 +41,14 @@ Industry standard. Intercepts, modifies and replays HTTP/HTTPS requests.
 nmap -sV -sC -O target.com
 nmap -p- --min-rate 5000 target.com
 whois example.com
-dig example.com ANY
+dig example.com A && dig example.com MX && dig example.com TXT  # NOT dig ANY (RFC 8482: many resolvers reject ANY queries)
 theHarvester -d target.com -b google,bing
 subfinder -d target.com -all
 ffuf -u https://target.com/FUZZ -w common.txt
 
 # WEB ANALYSIS
 nikto -h https://target.com
-sqlmap -u "target.com/api/x?id=1" --dbs
+sqlmap -u "target.com/api/x?id=1" --dbs  # ONLY with written authorization — unauthorized use is a crime
 gobuster dir -u target.com -w medium.txt -x php,js,json
 
 # NETWORK
