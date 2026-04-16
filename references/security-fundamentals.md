@@ -7,7 +7,7 @@
 ## CIA Triad (3 pillars of information security)
 
 - **Confidentiality** — only authorized people access the information.
-  In your stack: RLS + AES-256-GCM encryption + HTTPS + RBAC + MFA.
+  In your stack: RLS + encryption at rest (managed by Supabase/cloud provider) + HTTPS + RBAC + MFA. For app-level field encryption: AES-256-GCM in your code.
 - **Integrity** — information is not modified without authorization.
   In your stack: webhook signature verification + Zod validation before writes + audit trail.
 - **Availability** — information is accessible when needed.
@@ -74,6 +74,8 @@ Session hijacking = attacker steals cookie/token and enters without password. Re
 **Advanced defense — device fingerprinting:**
 
 For critical operations (plan change, account deletion, data transfer), verify session integrity by comparing User-Agent + IP against fingerprint stored at login.
+
+**Important caveat:** IP-based fingerprinting has false positives on mobile networks (WiFi to cellular switches IP frequently). Use it to **flag for review** or require re-auth, not to hard-block. Consider comparing IP range/ASN instead of exact IP for softer detection.
 
 ```sql
 CREATE TABLE active_sessions (

@@ -60,11 +60,11 @@ tcpdump -i eth0 -n port 443
 
 ```bash
 # Automated scan with Docker
-docker run -t owasp/zap2docker-stable zap-baseline.py -t https://your-app.com
+docker run -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t https://your-app.com
 
-# GitHub Actions integration
+# GitHub Actions integration (pin to recent stable version)
 - name: ZAP Scan
-  uses: zaproxy/action-baseline@v0.7.0
+  uses: zaproxy/action-baseline@v0.13.0
   with:
     target: 'https://your-app.vercel.app'
 ```
@@ -126,16 +126,26 @@ docker run -t owasp/zap2docker-stable zap-baseline.py -t https://your-app.com
 When something already happened in production and you need to understand what.
 
 ```bash
-# Analyze Vercel logs — attack patterns
-grep "401\|403\|429" vercel.log | sort | uniq -c | sort -rn | head -20
+# Cloud-native forensics (most SaaS incidents happen here)
+# Vercel: Dashboard > Logs > Export, or:
+vercel logs https://deployment-url.vercel.app > incident.log
+# Supabase: Dashboard > Logs > API/Auth/Postgres
+# Cloudflare: Dashboard > Security > Events
 
-# Forensic disk copy (compromised VPS)
+# Analyze log patterns
+grep "401\|403\|429" incident.log | sort | uniq -c | sort -rn | head -20
+
+# Forensic disk copy (only for VPS/bare-metal, not cloud SaaS)
 dd if=/dev/sda of=disk.img bs=4M status=progress
 sha256sum disk.img > disk.img.sha256
 
-# RAM analysis (if accessible)
-volatility -f memory.dmp imageinfo
-volatility -f memory.dmp --profile=Win10x64 pslist
+# RAM analysis — Volatility 3 (current version, v2 is legacy)
+vol -f memory.dmp windows.info
+vol -f memory.dmp windows.pslist
+vol -f memory.dmp windows.netscan
+# Legacy Volatility 2 (if v3 unavailable):
+# volatility -f memory.dmp imageinfo
+# volatility -f memory.dmp --profile=Win10x64 pslist
 ```
 
 ---
@@ -157,7 +167,7 @@ volatility -f memory.dmp --profile=Win10x64 pslist
 ## Legal Practice Platforms
 
 - **TryHackMe** (tryhackme.com) — guided, ideal for beginners
-- **HackTheBox** (hackthebox.eu) — real challenge, vulnerable machines
+- **HackTheBox** (hackthebox.com) — real challenge, vulnerable machines
 - **OWASP WebGoat** — intentional vulnerabilities for learning
 - **DVWA** — local, no legal risk: `docker run --rm -it -p 80:80 vulnerables/web-dvwa`
 - **PortSwigger Web Security Academy** — free, by Burp creators
@@ -169,7 +179,7 @@ volatility -f memory.dmp --profile=Win10x64 pslist
 - **CEH** (Certified Ethical Hacker) — basic, theoretical
 - **OSCP** (Offensive Security) — 100% practical, most respected
 - **CISSP** — management, more executive
-- **eJPT / eCPPT** (INE/eLearnSecurity) — practical, accessible prices
+- **eJPT / eCPPTv3** (INE Security, formerly eLearnSecurity) — practical, accessible prices
 
 ---
 

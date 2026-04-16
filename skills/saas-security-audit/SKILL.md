@@ -42,31 +42,44 @@ Read the project's CLAUDE.md for project-specific security rules. Then load:
 grep -rL "ENABLE ROW LEVEL SECURITY" supabase/migrations/ 2>/dev/null | grep -v "\.down\.sql"
 
 # Rule 2 — Audit trail on business tables (created_by, updated_by)
-grep -rL "created_by\|updated_by" supabase/migrations/*.sql 2>/dev/null
+# Only check migrations that CREATE TABLE (not all migrations)
+grep -l "CREATE TABLE" supabase/migrations/*.sql 2>/dev/null | \
+  xargs grep -L "created_by\|updated_by\|created_at" 2>/dev/null
 
 # Rule 3 — Admin returns 404 not 403 (don't reveal existence)
 grep -rn "status: 403\|status(403)" src/app/admin/ src/app/api/admin/ 2>/dev/null
 
 # Rule 4 — SERVICE_ROLE_KEY never in client code
-grep -rn "SERVICE_ROLE_KEY" src/app/ src/components/ src/features/ 2>/dev/null | grep -v "'use server'\|route.ts\|actions/"
+# Two-pass: find files with the key, then exclude server-only files
+for f in $(grep -rln "SERVICE_ROLE_KEY" src/app/ src/components/ src/features/ 2>/dev/null); do
+  grep -q "'use server'" "$f" || echo "VIOLATION: $f uses SERVICE_ROLE_KEY without 'use server'"
+done
 
 # Rule 5 — getUser() always, getSession() never on server
-grep -rn "getSession()" src/ 2>/dev/null | grep -v "browserClient\|'use client'"
+# Two-pass: find files with getSession, exclude those with 'use client'
+for f in $(grep -rln "getSession()" src/ 2>/dev/null); do
+  grep -q "'use client'" "$f" || echo "VIOLATION: $f uses getSession() in server context"
+done
 
 # Rule 6 — Rate limit on expensive endpoints
 grep -rL "rateLimit\|checkRateLimit" src/app/api/ai/ src/app/api/auth/ 2>/dev/null
 
-# Rule 7 — Zod validation in server actions (first line)
-grep -rn "'use server'" src/ -A 10 2>/dev/null | grep -B 10 "formData\|body" | grep -v "Schema.parse\|safeParse"
+# Rule 7 — Zod validation in server actions
+# Find server action files, check each for Zod usage
+for f in $(grep -rln "'use server'" src/ 2>/dev/null); do
+  grep -q "safeParse\|Schema.parse\|\.parse(" "$f" || echo "WARNING: $f has 'use server' but no Zod validation found"
+done
 
-# Rule 8 — Multi-tenancy double layer (RLS + code check)
-grep -rn "\.eq('id'" src/features/ 2>/dev/null | grep -v "\.eq('user_id'\|profile_id"
+# Rule 8 — Multi-tenancy: queries should filter by user_id/profile_id
+# Manual review: list all .select() queries in features that don't chain .eq('user_id')
+# NOTE: this is a heuristic, manual review needed for accuracy
+grep -rn "\.from(" src/features/ 2>/dev/null | grep "select" | grep -v "user_id\|profile_id\|auth"
 
 # Rule 9 — Env vars fail explicit, never hardcoded fallback
-grep -rn "process\.env\.[A-Z_]* ||" src/ 2>/dev/null | grep -v "|| undefined\||| null"
+grep -rn "process\.env\.[A-Z_]*\s*||\|process\.env\.[A-Z_]*\s*??" src/ 2>/dev/null | grep -v "|| undefined\|?? undefined\||| null\|?? null\|NODE_ENV"
 
 # Rule 10 — Private layouts = Server Component (not "use client")
-grep -l "'use client'" src/app/\(dashboard\)/layout.tsx src/app/\(protected\)/layout.tsx 2>/dev/null
+grep -l "'use client'" "src/app/(dashboard)/layout.tsx" "src/app/(protected)/layout.tsx" 2>/dev/null
 
 # Rule 11 — middleware.ts exact name
 ls src/middleware.ts 2>/dev/null || ls middleware.ts 2>/dev/null
@@ -83,8 +96,11 @@ grep -rn "redirectTo\|redirect_to" src/ 2>/dev/null | grep -v "startsWith('/')"
 # Rule 15 — Login uses generic error message (no email enumeration)
 grep -rn "email no existe\|email invalido\|usuario no registrado\|user not found\|email not registered" src/app/ 2>/dev/null
 
-# Rule 16 — RLS SELECT includes deleted_at IS NULL
-grep -rn "CREATE POLICY.*FOR SELECT" supabase/migrations/*.sql 2>/dev/null | grep -v "deleted_at IS NULL"
+# Rule 16 — RLS SELECT includes deleted_at IS NULL (only for tables with soft deletes)
+# First find tables that HAVE deleted_at column, then check their SELECT policies
+for table in $(grep -l "deleted_at" supabase/migrations/*.sql 2>/dev/null | xargs grep -l "CREATE TABLE" 2>/dev/null); do
+  grep "CREATE POLICY.*FOR SELECT" "$table" 2>/dev/null | grep -v "deleted_at IS NULL"
+done
 
 # Rule 17 — CSP with nonce, no 'unsafe-inline' in script-src
 grep -rn "'unsafe-inline'" next.config.ts src/middleware.ts 2>/dev/null | grep -i "script-src"
@@ -110,7 +126,14 @@ grep -rn "NEXT_PUBLIC_" src/ 2>/dev/null | grep -iE "SECRET|PRIVATE|SERVICE|ADMI
 # Compare migration dates vs types/supabase.ts modification date
 
 # Bug 6 — Supabase client mixed (server in client, client in server)
-grep -rn "createBrowserClient\|createServerClient" src/ 2>/dev/null | awk -F: '{print $1}' | sort -u
+# Check: createBrowserClient used in files WITHOUT 'use client' (server context)
+for f in $(grep -rln "createBrowserClient" src/ 2>/dev/null); do
+  grep -q "'use client'" "$f" || echo "VIOLATION: $f uses createBrowserClient without 'use client'"
+done
+# Check: createServerClient used in files WITH 'use client' (client context)
+for f in $(grep -rln "createServerClient" src/ 2>/dev/null); do
+  grep -q "'use client'" "$f" && echo "VIOLATION: $f uses createServerClient in 'use client' file"
+done
 
 # Bug 7 — Submit buttons without disabled state
 grep -rn 'type="submit"\|type=.submit.' src/ 2>/dev/null | grep -v "disabled"
@@ -122,7 +145,41 @@ find src/app/api -path "*webhook*" -name "route.ts" -exec grep -L "verifySignatu
 grep -rn "error\.message\|error\.stack" src/app/api/ 2>/dev/null | grep "NextResponse\|Response.json"
 
 # Bug 14 — Tables created at runtime without migration
-grep -rn "CREATE TABLE" src/ 2>/dev/null | grep -v supabase/migrations/
+grep -rn "CREATE TABLE" . 2>/dev/null | grep -v "supabase/migrations/\|node_modules/\|.next/"
+
+# --- OWASP Additional Checks ---
+
+# CORS — check for overly permissive Access-Control-Allow-Origin
+grep -rn "Access-Control-Allow-Origin\|cors(" src/ next.config.ts 2>/dev/null | grep -i "\*\|origin"
+
+# CSRF — custom API routes with POST that read cookies but no CSRF token
+# Server Actions have built-in CSRF protection, but route.ts handlers do NOT
+for f in $(find src/app/api -name "route.ts" 2>/dev/null); do
+  if grep -q "POST\|PUT\|DELETE\|PATCH" "$f" && grep -q "cookies\|getUser\|getSession" "$f"; then
+    grep -q "csrf\|x-csrf\|csrfToken" "$f" || echo "REVIEW: $f handles auth POST without CSRF check"
+  fi
+done
+
+# XSS — dangerouslySetInnerHTML with user/dynamic content
+grep -rn "dangerouslySetInnerHTML" src/ 2>/dev/null | grep -v "DOMPurify\|sanitize"
+
+# XSS — unescaped user input in script tags or eval
+grep -rn "eval(\|new Function(" src/ 2>/dev/null | grep -v "node_modules"
+
+# SQL injection — raw SQL with string interpolation
+grep -rn "supabase\.rpc\|\.sql\`\|sql(" src/ 2>/dev/null | grep "\${"
+
+# File upload security — check for type validation
+grep -rn "upload\|formData.*file\|req\.formData" src/app/api/ 2>/dev/null
+
+# Security headers beyond CSP (X-Frame-Options, HSTS, X-Content-Type-Options)
+grep -rn "X-Frame-Options\|Strict-Transport-Security\|X-Content-Type-Options\|Referrer-Policy\|Permissions-Policy" src/middleware.ts next.config.ts 2>/dev/null
+
+# Exposed .env files in public directory
+find public/ -name ".env*" -o -name "*.env" 2>/dev/null
+
+# localStorage for tokens (should use httpOnly cookies)
+grep -rn "localStorage.*token\|localStorage.*session\|localStorage.*jwt" src/ 2>/dev/null
 ```
 
 ---
@@ -189,11 +246,25 @@ comm -23 \
   <(grep -oE '^[A-Z_]+' .env.example 2>/dev/null | sort -u)
 
 # RLS policy self-reference (infinite recursion)
-grep -rn "CREATE POLICY" supabase/migrations/*.sql -A 5 2>/dev/null | \
-  awk '/ON public\.([a-z_]+)/{t=$3} /FROM public\.([a-z_]+)/{if($3==t) print FILENAME": potential recursion on "t}'
+# A policy on table X that SELECTs from table X causes infinite recursion
+# Manual check: for each migration with CREATE POLICY, verify the USING/WITH CHECK
+# clause does not SELECT FROM the same table the policy is ON
+for f in supabase/migrations/*.sql; do
+  [ -f "$f" ] || continue
+  # Extract table names from CREATE POLICY ... ON public.TABLE
+  tables=$(grep -oP 'ON public\.(\w+)' "$f" 2>/dev/null | sed 's/ON public\.//')
+  for t in $tables; do
+    # Check if same file has FROM public.TABLE in a policy context
+    grep -q "FROM public\.$t" "$f" 2>/dev/null && \
+      echo "REVIEW $f: policy on '$t' may reference itself (potential infinite recursion)"
+  done
+done
 
-# signInWithPassword in server action (cookies don't propagate reliably)
-grep -rn "signInWithPassword" src/ 2>/dev/null | grep -v "'use client'\|browserClient"
+# signInWithPassword in server action (cookies don't propagate reliably in Next.js 15+)
+# Should be client-side with createBrowserClient
+for f in $(grep -rln "signInWithPassword" src/ 2>/dev/null); do
+  grep -q "'use client'" "$f" || echo "WARNING: $f uses signInWithPassword without 'use client' — cookies may not propagate"
+done
 
 # CSP nonce + static page = blank page
 if grep -q "Content-Security-Policy.*nonce" src/middleware.ts 2>/dev/null; then

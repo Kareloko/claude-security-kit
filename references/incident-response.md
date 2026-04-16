@@ -89,9 +89,20 @@ Close the entry vector.
 
 **Order:**
 1. **Affected users** (if SEV-1 with exposed PII) — email + in-app
-2. **Data protection authority** (SEV-1 only)
-   - Most jurisdictions require notification within 48-72h
-   - Examples: GDPR (72h), Peru Ley 29733 (48h), COPPA (if minors)
+2. **Data protection authority** (SEV-1 only, per jurisdiction):
+
+   | Jurisdiction | Law | Notification Deadline | Authority |
+   |-------------|-----|----------------------|-----------|
+   | EU/EEA | GDPR Art. 33 | 72h to supervisory authority (DPA) | National DPA of each country |
+   | EU/EEA | GDPR Art. 34 | "Without undue delay" to users (only if high risk) | N/A (direct to users) |
+   | Peru | Ley 29733 + DS 003-2013-JUS | No fixed deadline. "When breach may cause harm" to ANPDP + affected parties | ANPDP (www.gob.pe/anpdp) |
+   | Colombia | Ley 1581 de 2012 | "As soon as possible" to SIC + affected parties | SIC (www.sic.gov.co) |
+   | Mexico | LFPDPPP Art. 20 | "Immediately" when breach significantly affects rights | INAI (home.inai.org.mx) |
+   | Chile | Ley 19.628 (+ future framework law) | No specific deadline yet | Consejo para la Transparencia |
+   | USA (minors) | State breach notification laws (not COPPA) | Varies by state (e.g., CA: 72h) | State AG office |
+
+   **Important:** COPPA (USA) governs data collection consent for children under 13, NOT breach notification. Breach notification for minors' data falls under state laws.
+
 3. **Clients/partners** if applicable
 4. **Public** only if inevitable or already in press
 
@@ -154,17 +165,22 @@ Even without evidence of compromise:
 ## Forensic Toolkit
 
 ```bash
-# Download Vercel logs
-vercel logs {project} --since 7d > incident-vercel.log
+# Download Vercel logs (use deployment URL, not project name)
+vercel logs https://your-deployment-url.vercel.app > incident-vercel.log
+# Alternative: use Vercel Dashboard > Logs > Export for historical data
 
 # Extract critical events
 grep -E "401|403|429|500" incident-vercel.log | sort | uniq -c | sort -rn > incident-errors.txt
 
-# Hash logs for chain of custody
-sha256sum incident-*.log > incident-checksums.txt
+# Hash logs for chain of custody (legal evidence integrity)
+sha256sum incident-*.log incident-*.txt > incident-checksums.txt
 
 # Store everything encrypted offsite
-zip -e incident-{DATE}.zip incident-*.* -P {password}
+# NEVER use zip -e (ZipCrypto is trivially breakable) or -P flag (password in shell history)
+gpg --batch --yes --symmetric --cipher-algo AES256 \
+  --output incident-$(date +%Y%m%d).tar.gz.gpg \
+  <(tar czf - incident-*.*)
+# Decrypt later: gpg --decrypt incident-YYYYMMDD.tar.gz.gpg | tar xzf -
 ```
 
 ---

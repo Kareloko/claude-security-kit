@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: trufflesecurity/trufflehog@main
+      - uses: trufflesecurity/trufflehog@v3.88.0  # pin to specific version, not @main
         with:
           path: ./
           base: ${{ github.event.repository.default_branch }}
@@ -91,6 +91,7 @@ Contact: mailto:security@yourdomain.com
 Expires: 2027-12-31T23:59:59Z
 Preferred-Languages: es, en
 Canonical: https://yourdomain.com/.well-known/security.txt
+Policy: https://yourdomain.com/security/policy
 ```
 
 ---
@@ -146,23 +147,27 @@ export async function GET(req: Request) {
   const supabase = createAdminClient()
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString()
 
-  // Check brute force (>10 login failures from same IP)
-  const { data: bruteForce } = await supabase
-    .from('security_logs')
-    .select('ip')
-    .eq('type', 'login_failed')
-    .gte('created_at', oneHourAgo)
+  // Check brute force: >10 login failures from SAME IP in 1 hour
+  const { data: bruteForce } = await supabase.rpc('detect_brute_force_ips', {
+    since: oneHourAgo,
+    threshold: 10,
+  })
+  // SQL: SELECT ip, COUNT(*) as attempts FROM security_logs
+  //   WHERE type = 'login_failed' AND created_at > $1
+  //   GROUP BY ip HAVING COUNT(*) > $2
 
-  // Check privilege escalation attempts
-  const { data: privesc } = await supabase
-    .from('security_logs')
-    .select('user_id')
-    .eq('type', 'permission_denied')
-    .gte('created_at', oneHourAgo)
+  // Check privilege escalation: >5 permission_denied from same user
+  const { data: privesc } = await supabase.rpc('detect_privesc_attempts', {
+    since: oneHourAgo,
+    threshold: 5,
+  })
+  // SQL: SELECT user_id, COUNT(*) as attempts FROM security_logs
+  //   WHERE type = 'permission_denied' AND created_at > $1
+  //   GROUP BY user_id HAVING COUNT(*) > $2
 
   const alerts = []
-  if ((bruteForce?.length ?? 0) > 10) alerts.push(`Brute force: ${bruteForce!.length} attempts`)
-  if ((privesc?.length ?? 0) > 5) alerts.push(`Privesc: ${privesc!.length} attempts`)
+  if (bruteForce?.length) alerts.push(`Brute force: ${bruteForce.length} IPs with 10+ failures`)
+  if (privesc?.length) alerts.push(`Privesc: ${privesc.length} users with 5+ denials`)
 
   if (alerts.length) {
     await sendAlert({ subject: 'Security Alert', body: alerts.join('\n'), severity: 'high' })
@@ -196,22 +201,31 @@ jobs:
 
       - name: Encrypt
         run: |
-          openssl enc -aes-256-gcm -salt -pbkdf2 -iter 100000 \
-            -in backup.sql.gz -out backup.sql.gz.enc \
-            -pass pass:"${{ secrets.BACKUP_ENCRYPTION_PASS }}"
+          # NOTE: openssl enc does NOT support GCM mode. Use CBC or gpg instead.
+          gpg --batch --yes --symmetric --cipher-algo AES256 \
+            --passphrase "${{ secrets.BACKUP_ENCRYPTION_PASS }}" \
+            --output backup.sql.gz.gpg backup.sql.gz
+          # Alternative if gpg unavailable:
+          # openssl enc -aes-256-cbc -salt -pbkdf2 -iter 100000 \
+          #   -in backup.sql.gz -out backup.sql.gz.enc \
+          #   -pass pass:"${{ secrets.BACKUP_ENCRYPTION_PASS }}"
 
       - name: Upload to offsite storage
         run: |
-          # Backblaze B2, S3, or any offsite storage
-          pip install b2
-          b2 authorize-account ${{ secrets.B2_KEY_ID }} ${{ secrets.B2_APP_KEY }}
-          b2 upload-file your-backup-bucket backup.sql.gz.enc \
-            "$(date +%Y/%m/%d)-backup.sql.gz.enc"
+          # Backblaze B2 CLI v4+ syntax
+          pip install b2sdk
+          b2 account authorize ${{ secrets.B2_KEY_ID }} ${{ secrets.B2_APP_KEY }}
+          b2 file upload your-backup-bucket backup.sql.gz.gpg \
+            "$(date +%Y/%m/%d)-backup.sql.gz.gpg"
 
-      - name: Verify backup size
+      - name: Verify backup integrity
         run: |
-          SIZE=$(stat -c %s backup.sql.gz.enc)
+          SIZE=$(stat -c %s backup.sql.gz.gpg)
           if [ "$SIZE" -lt 1000 ]; then echo "Suspiciously small backup"; exit 1; fi
+          # Verify decryption works (integrity check)
+          gpg --batch --yes --passphrase "${{ secrets.BACKUP_ENCRYPTION_PASS }}" \
+            --decrypt backup.sql.gz.gpg | gunzip | pg_restore --list > /dev/null 2>&1 \
+            && echo "Backup integrity OK" || echo "WARNING: backup may be corrupt"
 ```
 
 ---
