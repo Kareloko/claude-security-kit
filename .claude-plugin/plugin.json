@@ -1,0 +1,23 @@
+{
+  "name": "claude-security-kit",
+  "version": "1.0.0",
+  "description": "Production-grade security toolkit for Next.js + Supabase SaaS apps. Daily review, deep audit, incident response, legal compliance (GDPR/LATAM), and offensive security — all from Claude Code.",
+  "author": {
+    "name": "Somar Creaciones",
+    "url": "https://github.com/Kareloko"
+  },
+  "repository": "https://github.com/Kareloko/claude-security-kit",
+  "license": "MIT",
+  "keywords": [
+    "security",
+    "audit",
+    "nextjs",
+    "supabase",
+    "rls",
+    "gdpr",
+    "owasp",
+    "penetration-testing",
+    "incident-response",
+    "saas"
+  ]
+}
